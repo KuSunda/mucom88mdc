@@ -107,6 +107,8 @@ MUCOM88mdはMUCOM88から移植・派生した音源ドライバーとそれの�
 |　　clean_mu88md.bat　　　　　自動生成ファイルの削除  
 |　　muc88Cnv.bat　　　　　　　自動生成ファイルの削除、BGM/SEの再コンバート、ビルドを行うバッチファイル  
 |　　readme.md　　　　　　　　　使い方  
++---out
+|　  rom.bin                  MegaDrive(実機・エミュレーター)向け、ROMファイル
 |     
 +---mucom  
 |　|　mucom88mdcCnv.exe　　　　BGMの.mubとPCMファイルをMegaDrive形式に変換  
@@ -116,42 +118,45 @@ MUCOM88mdはMUCOM88から移植・派生した音源ドライバーとそれの�
 |　|　|　muc2muc88md.bat　　　　mubフォルダ内の.mucをmucom88でコンバート、mucom88mdcCnvSe.exeでMegaDrive形式に変換、生成したファイルをsrcフォルダに移動するバッチファイル  
 |　|　|　mublist.txt　　　　　　MegaDriveに変換する.mubファイルリスト  
 |　|　|　wavlist.txt　　　　　　MegaDriveに変換する.wavファイルリスト  
-|　|　|　readme.md             
-|　|　|　bare16.muc  
-|　|　|　sor403.muc  
-|　|　|　stk023.muc  
-|　|　|　stkvoice.dat          
-|　|　|　bare2voice.dat        
-|　|　|　sor4pcm.bin           
+|　|　|　sampl0.muc  
+|　|　|　sampl2.muc  
+|　|　|　mucompcm.bin  
+|　|　|　voice.dat          
 |　|　|     
 |　|　\---wav　　　　　　　　　　MegaDrive形式に変換されるWavファイル  
-|　|　　　SOR4_Chh.wav  
-|　|　　　SOR4_Chh_2.wav  
-|　|　　　SOR4_Clap.wav  
-|　|　　　SOR4_Clap_2.wav  
-|　|　　　SOR4_Cym.wav  
-|　|　　　SOR4_Cym_2.wav  
-|　|　　　SOR4_Kick.wav  
-|　|　　　SOR4_Kick2.wav  
-|　|　　　SOR4_Ohh.wav  
-|　|　　　SOR4_Ohh_2.wav  
-|　|　　　SOR4_Snare.wav  
-|　|　　　SOR4_Snare_2.wav  
+|　|　　　01_muccom88.wav  
+|　|　　　02_muccom88.wav  
+|　|　　　03_muccom88.wav  
+|　|　　　04_muccom88.wav  
+|　|　　　05_muccom88.wav  
+|　|　　　06_muccom88.wav  
+|　|　　　07_muccom88.wav  
+|　|　　　08_muccom88.wav  
+|　|　　　09_muccom88.wav  
+|　|　　　10_muccom88.wav  
+|　|　　　11_muccom88.wav  
+|　|　　　12_muccom88.wav  
+|　|　　　13_muccom88.wav  
+|　|　　　14_muccom88.wav  
+|　|　　　15_muccom88.wav  
+|　|　　　16_muccom88.wav  
+|　|　　　17_muccom88.wav  
 |　|　　　  
 |　\---se  
 |　　　se2muc88md.bat　　　seフォルダ内の.mucをmucom88でコンバート、mucom88mdcCnvSe.exeでMegaDrive形式に変換、生成したファイルをsrcフォルダに移動  
 |　　　se_list.txt　　　　　MegaDrive形式に変換する.mubファイルのリスト  
-|　　　BOM.muc　　　　　　　SEのMML  
-|　　　CANCEL00.muc  
-|　　　CANCEL01.muc  
-|　　　COIN.muc  
-|　　　CURSOR.muc  
-|　　　NOISE0000.muc  
-|　　　OK.muc  
-|　　　PAUSE.muc  
-|　　　POWA.muc  
-|　　　SHOT.muc  
-|　　　TALK.muc  
+|　　　N00_OK.muc          SEのMML
+|　　　N00_OK.muc
+|　　　N01_CANCEL.muc
+|　　　N02_CANT_SELECT.muc
+|　　　N03_CURSOR_MOVE.muc
+|　　　N04_PAUSE.muc
+|　　　N05_TALK.muc
+|　　　N10_COIN.muc
+|　　　N11_SHOT.muc
+|　　　N12_BOM.muc
+|　　　N13_NOISE0000.muc
+|　　　N14_POWA.muc
 |             
 \---src  
 　　|　s_main.c　　　　　　　　　初期化とメインループ  
