@@ -13,11 +13,19 @@ MUCOM88mdはMUCOM88から移植・派生した音源ドライバーとそれの�
 ライセンスはオリジナルのMUCOM88(License: CC BY-NC-SA 4.0)に準拠します。  
 詳細は本家のサイトをご確認ください。
 
-[OPEN MUCOM PROJECT (株式会社エインシャント様)](https://www.ancient.co.jp/~MUCOM88/)  
+[OPEN MUCOM PROJECT (株式会社エインシャント様)](https://www.ancient.co.jp/~mucom88/)  
  MUCOM88公式サイト。オリジナルのMUCOM88はこちらのサイトで配布されています。
 
 [OPEN MUCOM88 Wiki (ONION software/おにたま様)](https://github.com/onitama/MUCOM88/wiki)  
  OPEN MUCOM88 公式Wikiサイト。MUCOM88の各種情報はこちらのサイトをご参照下さい。
+
+### オリジナルのMUCOM88から流用しているコード
+ - オリジナルのドライバのコード  
+ [OPEN MUCOM88プロジェクトについて]のmucom88 Ver.1.7をベースにしています。
+ <https://github.com/onitama/mucom88/tree/master/pc8801src/ver1.2/music.asm>
+ - サンプルのデータについて  
+ このリポジトリには、[mucom88win]の[sampl0.muc][sampl1.muc][mucompcm.bin][voice.dat]が含まれています。  
+ MegaDrive向けのPCMデータは[mucompcm.bin]から返還したデータデータです。
 
 ## MUCOM88mdについて  
  メガドライブ開発環境はSGDK(Ver.1.62)で作成されています。  
@@ -36,14 +44,14 @@ MUCOM88mdはMUCOM88から移植・派生した音源ドライバーとそれの�
   - PCMは、音程・音量の調整が出来ず、それに絡むパラメータは処理されない。
   - PCMは5KHz予定だが現時点で少しずれている。
   - VSync駆動:Timer-Bの値は参照していません。曲のテンポはクロックと音符の長さで調整となります。
-  - G(RHYTHM)チャンネルは非対応  
-  - SSGの低音部分がDCSGの仕様で[o2 a]未満の音は発声出来ず異音が発生する。
+  - G(RHYTHM)チャンネルは非対応。データが有ってもスキップされます。  
+  - SSGの低音部分がDCSGの仕様で[o2 a]未満の音は発声出来ず異音が発生します。
 
 ## リリースノート
   - Ver.0.1  
-  Privateで公開  
+  コードを整理したいけど、時間がないのでとりあえず公開しました。
 
-## 使い方（概要）
+## 使い方  
  - SGDK 1.62の環境を構築  
  Documentを参考に環境変数の設定とbinフォルダへのPATHを設定
  - mucom88  
