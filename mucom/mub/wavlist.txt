@@ -1,0 +1,17 @@
+.\wav\01_mucom88.wav
+.\wav\02_mucom88.wav
+.\wav\03_mucom88.wav
+.\wav\04_mucom88.wav
+.\wav\05_mucom88.wav
+.\wav\06_mucom88.wav
+.\wav\07_mucom88.wav
+.\wav\08_mucom88.wav
+.\wav\09_mucom88.wav
+.\wav\10_mucom88.wav
+.\wav\11_mucom88.wav
+.\wav\12_mucom88.wav
+.\wav\13_mucom88.wav
+.\wav\14_mucom88.wav
+.\wav\15_mucom88.wav
+.\wav\16_mucom88.wav
+.\wav\17_mucom88.wav

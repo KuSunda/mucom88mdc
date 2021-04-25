@@ -1,0 +1,11 @@
+#mucom88 1.7
+#title
+#composer 
+#author 
+#date
+#comment Noise00
+
+F C112 t199 l64 @0 v14 E255,255,255,190,1,20
+
+F  P2 w0c w10c w15c w20c
+F  w0c& w0c& w0c& w0c

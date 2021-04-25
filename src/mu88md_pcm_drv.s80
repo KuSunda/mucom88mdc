@@ -1,0 +1,611 @@
+;----------------------------------------------------------------
+; mucom88md PCM SoundDriver on Z80
+; by KuSunda
+;
+; サイクル数
+; <http://mydocuments.g2.xrea.com/html/p6/z80ref.html>
+; PCM合成
+; <https://embedded.hatenadiary.org/entry/20151004/p1>
+;
+; Z80A (3.58MHz/NTSC、3.54MHz/PAL)
+; 3,580,000Hz / Prog Clock = PCM Rate
+; https://audacity-mp3.xyz/sannpurinngure-to/
+;
+;
+;----------------------------------------------------------------
+; Flow
+;  CH0:idle リクエストを待っている。リクエストが有ればバッファリングルーチンに移動
+;  CH0:Bufferring 4サンプルを取得。後ろのmixでSample1を再生
+;  CH0:Sample2再生・リクエストチェック
+;  CH0:Sample3再生・リクエストチェック
+;  CH0:Sample4再生・リクエストチェック バッファリングか、Idleに戻る
+;
+;  CH1:CH0と同じことを行う
+;
+;  MIX:CH0とCH1のサンプルを出力
+;----------------------------------------------------------------
+
+;COUNTER     EQU     $1FF0           ; 16 bits counter
+COMM_CH0		EQU		$1FFE		; FF = done, < 80 = SFX ID to play
+COMM_CH1		EQU		$1FFF		; FF = done, < 80 = SFX ID to play
+
+FM_ACCESS		EQU     $1FFD		; indicate that Z80 is accessing DAC register (00 = ok, 2A = DAC access)
+
+Z80_INITED		EQU     $1FFC		; 
+
+
+; CH0 DAT
+COMM_CH0_BANK	EQU		$1FD0		; 0xD0 L 0xD1 M 0xD2 H
+COMM_CH0_LEN	EQU		$1FD3 		; 0xD3 L 0xD4 H
+
+CH0_ADDR		EQU		$1FD5		; channel 0 address (3 bytes: LMH)
+CH0_LEN			EQU		$1FD8 		; channel 0 length (2 bytes: LH)
+									; >> $1fd9
+
+; CH1 DAT
+COMM_CH1_BANK	EQU		$1FE0       ; 0xD8 L 0xD9 M 0xDA H
+COMM_CH1_LEN	EQU		$1FE3       ; 0xDB L 0xDB H
+
+CH1_ADDR		EQU		$1FE5		; channel 1 address (3 bytes: LMH)
+CH1_LEN			EQU		$1FE8		; channel 1 length (2 bytes: LH)
+									; >> $1fe9
+
+; ルーチンナンバー
+CH0_RNO			EQU		$1FC0		; 
+CH1_RNO			EQU		$1FC8		; 
+
+CH_BLEN_MAX		EQU		$4
+CH0_BUFF		EQU		$1FB0		; 4Byte
+CH1_BUFF		EQU		$1FB8		; 4Byte
+
+; 現在の再生サンプルアドレス
+CH0_BPTR		EQU		$1FA2		; 2Byte
+CH1_BPTR		EQU		$1FA4		; 2Byte
+
+; define
+
+; rtn no
+RTN_IDLE		EQU		$0
+RTN_BUFFRING	EQU		$1
+RTN_PLAY2		EQU		$2
+RTN_PLAY3		EQU		$3
+RTN_PLAY4		EQU		$4
+
+; silent sample
+SILENCE_SAMPLE	EQU		$80			; 無音のサンプル（$40も検討）
+
+;----------------------------------------------------------------
+; Boot
+;----------------------------------------------------------------
+            ORG     $0000
+init
+	di                      ; disable ints
+	im      $01             ; set int mode 1
+	ld      sp, $1000       ; setup stack
+	jp		EntryPoint
+
+;----------------------------------------------------------------
+	BLOCK   $0038-$
+VSync:
+	reti            ; 割り込みルーチンから返る
+
+;==============================================================================
+; Entry point
+;==============================================================================
+EntryPoint
+	ld      a,0xff
+	ld      (COMM_CH0),a        ; clear command ch 0
+	ld      (COMM_CH1),a        ; clear command ch 1
+
+	xor		a
+	ld      (CH0_RNO),a        ; clear ch 0 rno
+	ld      (CH1_RNO),a        ; clear ch 1 rno
+
+;----------------------------------------------------------------
+loop_top:
+
+;----------------------------------------------------------------
+; CH0
+ch0_loop:
+	ld		a,(CH0_RNO)					; 13
+	ld		b,a							; 4
+	add		b							; 4
+	add		b							; 4
+	ld		(ch0_mode_table-1),a		; 13
+
+;----------------------------------------------------------------------
+	jr		ch0_loop					; 12
+ch0_mode_table
+	jp		c0_idle						; 12 
+	jp		c0_read_buff				; 12 
+	jp		c0_play_buff2				; 12 
+	jp		c0_play_buff3				; 12 
+	jp		c0_play_buff4				; 12 
+
+;----------------------------------------------------------------------
+; idelw RTN_BUFFRING2
+; DAC Buffer Clear & Req Check
+; リクエストを受けてから1フレーム遅延して演奏開始
+;----------------------------------------------------------------------
+c0_idle:
+	; アイドル中のサンプルを0x80でクリア
+	ld		hl,CH0_BUFF			; 10
+	ld		(hl),SILENCE_SAMPLE			; 10	Silent Sample
+	ld		(CH0_BPTR),hl		; 16 バッファのポインタ => 50
+
+	; リクエストチェック
+	ld		a,(COMM_CH0)		; 7
+	inc		a					; 4
+	jr		z,ch0_skip			; 12 => 49
+
+	; NEXT RTN
+	ld		a,RTN_BUFFRING		; 7
+	ld		(CH0_RNO),a			; 13
+	; REQ Erase
+	ld		a,0xff				; 7
+	ld		(COMM_CH0),a		; 13 => 30
+
+	ld		hl,COMM_CH0_BANK	; 10
+	ld		de,CH0_ADDR			; 10
+	; adr
+	ldi							; 16 
+	ldi							; 16 
+	ldi							; 16 
+	; len
+	ldi							; 16 
+	ldi							; 16 
+
+	jp		ch1_loop			; 10 
+								; => 168
+ch0_skip:
+
+	ld		b,12				; 7
+c0_idle_wait:
+	djnz	c0_idle_wait		; 8/13
+
+	jp		ch1_loop			; 10	=> 249 + 10
+
+;----------------------------------------------------------------------
+; Sampleのバッファリングと1サンプル目の演奏
+;----------------------------------------------------------------------
+c0_read_buff:
+	ld		bc,0x6000           ; 10 Bankl IO
+	ld		hl,(CH0_ADDR)       ; 16 HL = sample 0 addr (ML)
+	ld		a,h					; 4
+	rlca						; 4
+	ld		(bc),a				; 13
+	ld		a,(CH0_ADDR+2)		; 13
+	ld		(bc),a				; 13　　=> 63
+
+	rrca						; 4
+	ld		(bc),a				; 13
+	rrca						; 4
+	ld		(bc),a				; 13
+	rrca						; 4
+	ld		(bc),a				; 13
+	rrca						; 4
+	ld		(bc),a				; 13
+	rrca						; 4
+	ld		(bc),a				; 13
+	rrca						; 4
+	ld		(bc),a				; 13
+	rrca						; 4
+	ld		(bc),a				; 13	bank = addr bit 23                    =97
+
+;	ld		hl,(CH0_ADDR)		; 16	HL = sample 0 addr (ML)
+	set		7,h					; 8		HL = sample ch0 addr banked
+	ld		de,CH0_BUFF			; 10
+	ld		(CH0_BPTR),de		; 16 バッファのポインタ => 50
+
+	ldi							; 16 
+	ldi							; 16
+	ldi							; 16
+	ldi							; 16 => 64
+
+	; Next rtn
+	ld		a,RTN_PLAY2			; 7
+	ld		(CH0_RNO),a			; 13
+
+	jp 		ch1_loop			; 10
+
+								;  = 247
+
+;------------------------------------------------------------------------
+; 2Sample目の演奏
+;------------------------------------------------------------------------
+c0_play_buff2:
+	ld		bc,CH0_BUFF+1		; 10 Next Buff
+	ld		(CH0_BPTR),bc		; 20 裏レジスタで保持すべき？もしくはサンプルを取得しておく
+								; => 42
+	; Wait
+	ld		b,5				; 7
+c0_play_buff2_wait:
+	djnz	c0_play_buff2_wait		; 8/13
+									; 7+ 13*x+8
+
+	; Buff Readの処理を1フレーム遅延
+	ld		hl,(CH0_LEN)		; 16
+	ld		de,-$0004			; 10
+	add		hl,de				; 11
+	ld		(CH0_LEN),hl		; 16	HL = ch1.len
+
+	ld		hl,(CH0_ADDR)		; 16
+	ld		de,$0004			; 10
+	add		hl,de				; 11
+	ld		(CH0_ADDR),hl		; 16	HL = ch1.len
+								; => 106
+
+
+	; CMD Check
+	ld		a,(COMM_CH0)		; 7
+	inc		a					; 4
+	jr		z,c0_play_buff2_skip		; 12 => 23
+
+	xor		a					; 4
+	ld		(CH0_RNO),a			; 13 Wait
+	jp		ch1_loop
+
+c0_play_buff2_skip:
+	; Next rtn
+	ld		a,RTN_PLAY3			; 7
+	ld		(CH0_RNO),a			; 13
+								; = 20
+;c0_play_buff2_skip2:
+	jp 		ch1_loop			; 168 + 10(Wait以外)
+
+								; Wait以外　
+;------------------------------------------------------------------------
+; 3Sample目の演奏
+;------------------------------------------------------------------------
+c0_play_buff3:
+	ld		bc,CH0_BUFF+2		; 10 Next Buff
+	ld		(CH0_BPTR),bc		; 20 裏レジスタで保持すべき？もしくはサンプルを取得しておく
+								; => 42
+
+	; Wait
+	ld		b,12				; 7
+c0_play_buff3_wait:
+	djnz	c0_play_buff3_wait		; 8/13
+									; 7+ 13*x+8
+
+	; CMD Check
+	ld		a,(COMM_CH0)		; 7
+	inc		a					; 4
+	jr		z,c0_play_buff3_skip		; 12 => 23
+
+	xor		a					; 4
+	ld		(CH0_RNO),a			; 13 Wait
+	jp		ch1_loop
+
+c0_play_buff3_skip:
+	; Next rtn
+	ld		a,RTN_PLAY4			; 7
+	ld		(CH0_RNO),a			; 13
+
+	jp 		ch1_loop			; 62 + 10
+
+;------------------------------------------------------------------------
+; 4Sample目の演奏
+;------------------------------------------------------------------------
+c0_play_buff4:
+	ld		bc,CH0_BUFF+3		; 10 Next Buff
+	ld		(CH0_BPTR),bc		; 20 裏レジスタで保持すべき？もしくはサンプルを取得しておく
+								; => 42
+
+	; Wait
+	ld		b,10					; 7
+c0_play_buff4_wait:
+	djnz	c0_play_buff4_wait		; 8/13
+									; 7+ 13*x+8
+
+
+	; 最後のバッファなら終了 
+	ld		hl,(CH0_LEN)			; 16
+	ld		a,l						; 4
+	or		h						; 4
+	jr		nz,c0_play_buff4_skip	; 7/12
+									; 31/36
+
+	; idleに移動
+	xor		a						; 4
+	ld		(CH0_RNO),a				; 13 Wait
+	jp 		ch1_loop				; 10
+
+									; 100 +
+
+c0_play_buff4_skip:
+
+
+	; CMD Check
+	ld		a,(COMM_CH0)		; 7
+	inc		a					; 4
+	jr		z,c0_play_buff4_cmd_skip		; 12 => 23
+
+	xor		a					; 4
+	ld		(CH0_RNO),a			; 13 Wait
+	jp		ch1_loop
+
+c0_play_buff4_cmd_skip
+
+
+	; buffering
+	ld		a,RTN_BUFFRING			; 7
+	ld		(CH0_RNO),a				; 13 Wait
+	jp 		ch1_loop				; 10
+
+									; 108 +
+
+;----------------------------------------------------------------
+; CH1
+;----------------------------------------------------------------
+ch1_loop:
+
+	ld		a,(CH1_RNO)					; 13
+	ld		b,a							; 4
+	add		b							; 4
+	add		b							; 4
+	ld		(ch1_mode_table-1),a		; 13
+
+;----------------------------------------------------------------------
+	jr		ch1_loop					; 12
+ch1_mode_table
+	jp		c1_idle						; 12 
+	jp		c1_read_buff				; 12 
+	jp		c1_play_buff2				; 12 
+	jp		c1_play_buff3				; 12 
+	jp		c1_play_buff4				; 12 
+;----------------------------------------------------------------------
+										; => 62
+
+;----------------------------------------------------------------------
+; idelw RTN_BUFFRING2
+; DAC Buffer Clear & Req Check
+; リクエストを受けてから1フレーム遅延して演奏開始
+;----------------------------------------------------------------------
+c1_idle:
+	; アイドル中のサンプルを0x80でクリア
+	ld		hl,CH1_BUFF			; 10
+	ld		(hl),SILENCE_SAMPLE			; 10	Silent Sample
+	ld		(CH1_BPTR),hl		; 16 バッファのポインタ => 50
+
+	; リクエストチェック
+	ld		a,(COMM_CH1)		; 7
+	inc		a					; 4
+	jr		z,ch1_skip			; 12 => 49
+
+	; NEXT RTN
+	ld		a,RTN_BUFFRING		; 7
+	ld		(CH1_RNO),a			; 13
+	; REQ Erase
+	ld		a,0xff				; 7
+	ld		(COMM_CH1),a		; 13 => 30
+
+	; Req info
+	ld		hl,COMM_CH1_BANK	; 10
+	ld		de,CH1_ADDR			; 10
+	; adr
+	ldi							; 16 
+	ldi							; 16 
+	ldi							; 16 
+	; len
+	ldi							; 16 
+	ldi							; 16 => 100 (通常コピー128)
+
+
+	jp		ch1_loop_last			; 10 
+								; => 168
+ch1_skip:
+	; 168 wait
+	ld		b,12				; 7
+c1_idle_wait:
+	djnz	c1_idle_wait		; 8/13
+
+;	jp		ch1_loop_last			; 10	=> 277 + 10  通常コピー
+	jp		ch1_loop_last			; 10	=> 249 + 10
+
+;----------------------------------------------------------------------
+; Sampleのバッファリングと1サンプル目の演奏
+;----------------------------------------------------------------------
+c1_read_buff:
+	ld		bc,0x6000           ; 10 DCSG IO
+	ld		hl,(CH1_ADDR)       ; 16 HL = sample 0 addr (ML)
+	ld		a,h					; 4
+	rlca						; 4
+	ld		(bc),a				; 13
+	ld		a,(CH1_ADDR+2)		; 13
+	ld		(bc),a				; 13　　=> 63
+
+	rrca						; 4
+	ld		(bc),a				; 13
+	rrca						; 4
+	ld		(bc),a				; 13
+	rrca						; 4
+	ld		(bc),a				; 13
+	rrca						; 4
+	ld		(bc),a				; 13
+	rrca						; 4
+	ld		(bc),a				; 13
+	rrca						; 4
+	ld		(bc),a				; 13
+	rrca						; 4
+	ld		(bc),a				; 13	bank = addr bit 23                    =97
+
+;	ld		hl,(CH1_ADDR)		; 16	HL = sample 0 addr (ML)
+	set		7,h					; 8		HL = sample ch0 addr banked
+	ld		de,CH1_BUFF			; 10
+	ld		(CH1_BPTR),de		; 16 バッファのポインタ => 50
+
+	ldi							; 16 
+	ldi							; 16
+	ldi							; 16
+	ldi							; 16 => 64
+
+	; Next rtn
+	ld		a,RTN_PLAY2			; 7
+	ld		(CH1_RNO),a			; 13
+
+	jp 		ch1_loop_last			; 10
+
+								;  = 247
+
+;------------------------------------------------------------------------
+; 2Sample目の演奏
+;------------------------------------------------------------------------
+c1_play_buff2:
+	ld		bc,CH1_BUFF+1		; 10 Next Buff
+	ld		(CH1_BPTR),bc		; 20 裏レジスタで保持すべき？もしくはサンプルを取得しておく
+								; => 42
+	; Wait
+	ld		b,5				; 7
+c1_play_buff2_wait:
+	djnz	c1_play_buff2_wait		; 8/13
+									; 7+ 13*x+8
+
+	; Buff Readの処理を1フレーム遅延
+	ld		hl,(CH1_LEN)		; 16
+	ld		de,-$0004			; 10
+	add		hl,de				; 11
+	ld		(CH1_LEN),hl		; 16	HL = ch1.len
+
+	ld		hl,(CH1_ADDR)		; 16
+	ld		de,$0004			; 10
+	add		hl,de				; 11
+	ld		(CH1_ADDR),hl		; 16	HL = ch1.len
+								; => 106
+
+
+	; CMD Check
+	ld		a,(COMM_CH1)		; 7
+	inc		a					; 4
+	jr		z,c1_play_buff2_skip		; 12 => 23
+
+	xor		a					; 4
+	ld		(CH1_RNO),a			; 13 Wait
+	jp 		ch1_loop_last			; 168 + 10(Wait以外)
+
+c1_play_buff2_skip:
+
+	; Next rtn
+	ld		a,RTN_PLAY3			; 7
+	ld		(CH1_RNO),a			; 13
+								; = 20
+
+	jp 		ch1_loop_last			; 168 + 10(Wait以外)
+
+;------------------------------------------------------------------------
+; 3Sample目の演奏
+;------------------------------------------------------------------------
+c1_play_buff3:
+	ld		bc,CH1_BUFF+2		; 10 Next Buff
+	ld		(CH1_BPTR),bc		; 20 裏レジスタで保持すべき？もしくはサンプルを取得しておく
+								; => 42
+
+	; Wait
+	ld		b,12				; 7
+c1_play_buff3_wait:
+	djnz	c1_play_buff3_wait		; 8/13
+									; 7+ 13*x+8
+
+	; CMD Check
+	ld		a,(COMM_CH1)		; 7
+	inc		a					; 4
+	jr		z,c1_play_buff3_skip		; 12 => 23
+
+	xor		a					; 4
+	ld		(CH1_RNO),a			; 13 Wait
+	jp 		ch1_loop_last			; 168 + 10(Wait以外)
+
+c1_play_buff3_skip		; 12 => 23
+
+	; Next rtn
+	ld		a,RTN_PLAY4			; 7
+	ld		(CH1_RNO),a			; 13
+
+	jp 		ch1_loop_last			; 62 + 10
+
+;------------------------------------------------------------------------
+; 4Sample目の演奏
+;------------------------------------------------------------------------
+c1_play_buff4:
+	ld		bc,CH1_BUFF+3		; 10 Next Buff
+	ld		(CH1_BPTR),bc		; 20 裏レジスタで保持すべき？もしくはサンプルを取得しておく
+								; => 42
+
+	; Wait
+	ld		b,10					; 7
+c1_play_buff4_wait:
+	djnz	c1_play_buff4_wait		; 8/13
+									; 7+ 13*x+8
+
+
+	; 最後のバッファなら終了 
+	ld		hl,(CH1_LEN)			; 16
+	ld		a,l						; 4
+	or		h						; 4
+	jr		nz,c1_play_buff4_skip	; 7/12
+									; 31/36
+
+
+	; idleに移動
+	xor		a						; 4
+	ld		(CH1_RNO),a				; 13 Wait
+	jp 		ch1_loop_last				; 10
+									; 100 +
+
+c1_play_buff4_skip:
+
+	; CMD Check
+	ld		a,(COMM_CH1)		; 7
+	inc		a					; 4
+	jr		z,c1_play_buff4_cmd_skip		; 12 => 23
+
+	xor		a					; 4
+	ld		(CH1_RNO),a			; 13 Wait
+	jp 		ch1_loop_last			; 168 + 10(Wait以外)
+
+c1_play_buff4_cmd_skip		; 12 => 23
+
+
+
+	; buffering
+	ld		a,RTN_BUFFRING			; 7
+	ld		(CH1_RNO),a				; 13 Wait
+	jp 		ch1_loop_last				; 10
+
+									; 108 +
+
+ch1_loop_last:
+
+;----------------------------------------------------------------------
+; Mix
+;----------------------------------------------------------------------
+mix:
+	ld		de,FM_ACCESS		; 10
+	ld		a,0x2a				; 7
+	ld		(de),a				; 13	indicate Z80 is accessing YM DAC register
+	ld		(0x4000),a			; 13	prepare DAC write                     =37
+
+	ld		hl,(CH0_BPTR)
+	ld		a,(hl)				; 13
+	ld		b,a
+
+	ld		hl,(CH1_BPTR)
+	ld		a,(hl)				; 13
+
+	add		a,b					; mix
+	rra							; A = mixed sample (7 bits)
+
+
+	; Write DAC
+	ld		(0x4001),a			; 13	write sample to DAC                   =28
+	xor		a					; 4
+	ld		(de),a				; 13	Z80 release YM access                 =11
+										; => 96
+
+ch1_last_skip:
+	jp		loop_top			; 12
+
+								; => 35
+
+;----------------------------------------------------------------------
+;        BLOCK   $1000-$
