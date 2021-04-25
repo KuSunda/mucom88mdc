@@ -185,5 +185,5 @@ MUCOM88mdはMUCOM88から移植・派生した音源ドライバーとそれの�
 - 古代祐三　様　
 - 株式会社エインシャント 様
 - ONION software/onitama　様
-- - SGDK(Stephane-D)
+- SGDK(Stephane-D)　様
 - MUCOM88/FM音源/メガドライブ関係の情報を発信しているみなさま
