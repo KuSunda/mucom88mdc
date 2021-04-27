@@ -65,9 +65,10 @@ int main()
 	Dbg_SetPrintPos(17,0);
 	Dbg_PrintString("YM:", 0);
 
+#if USE_CUSTOM_SDGK
 	Dbg_SetPrintPos(24,0);
 	Dbg_PrintString("CP:", 0);
-
+#endif
 	Dbg_SetPrintPos(31,0);
 	Dbg_PrintString("CA:", 0);
 
@@ -85,7 +86,8 @@ int main()
 
 #if DISP_JOB_INFO
 		{
-			u16 cpuload;
+			u16 cpuload = 0;
+#if USE_CUSTOM_SDGK
 			cpuload = (CpuFrameLoad * ((u16) 100)) / (u16) (MUCOM88_LOAD_MEAN_FRAME_NUM * 255);
 
 			CpuFrameLoad_timer++;
@@ -100,7 +102,7 @@ int main()
 			}
 
 			cpuload = CpuFrameLoad_max;
-
+#endif
 
 			char tmp[16];
 			// 
@@ -109,10 +111,11 @@ int main()
 			Dbg_PrintString(&tmp[0], 0);
 
 			// 
+#if USE_CUSTOM_SDGK
 			Dbg_SetPrintPos(27, 0);
 			intToStr((s16)cpuload,&tmp[0], 3);
 			Dbg_PrintString(&tmp[0], 0);
-
+#endif
 
 			cpuload = SYS_getCPULoad();
 			Dbg_SetPrintPos(34, 0);
