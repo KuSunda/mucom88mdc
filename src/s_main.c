@@ -42,7 +42,7 @@ extern void Dbg_SetPrintPos(u16 x, u16 y);
 #if USE_CUSTOM_SDGK
 extern u16 CpuFrameLoad;			// Custom SGDK
 #else
-extern u16 CpuFrameLoad;			// Custom SGDK
+u16 CpuFrameLoad;			// Custom SGDK
 #endif
 
 u16 CpuFrameLoad_timer;
