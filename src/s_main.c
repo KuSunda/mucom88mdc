@@ -18,7 +18,7 @@ void VBlank_func();
 //-----------------------------------------------------------------------------
 #define DISP_JOB_INFO	(1)
 #define JOB_PEAK_TIME	(20)
-
+#define USE_CUSTOM_SDGK  (0)
 //*****************************************************************************
 // Program
 //*****************************************************************************
@@ -39,7 +39,12 @@ void VBlank_func()
 extern void Dbg_SetPrintPos(u16 x, u16 y);
 
 // 負荷計測用
+#if USE_CUSTOM_SDGK
 extern u16 CpuFrameLoad;			// Custom SGDK
+#else
+extern u16 CpuFrameLoad;			// Custom SGDK
+#endif
+
 u16 CpuFrameLoad_timer;
 u16 CpuFrameLoad_max;
 
@@ -49,7 +54,7 @@ int main()
 {
 	u32 Gametime = 0;
 	CpuFrameLoad_timer = 0;
-	CpuFrameLoad_max = 0;	// KKK
+	CpuFrameLoad_max = 0;
 
 	Mu88md_SystemAllInit();				// [Mu88md] Mu88md　初期化
 	SYS_setVIntCallback(VBlank_func);	// [Mu88md] CallBack登録
